@@ -56,7 +56,7 @@ class RIGIFYFORMBLAB_OT_generaterig(bpy.types.Operator):
                 is_muscle_rig = True
                 break
 
-        if not is_muscle_rig:
+        if not (is_muscle_rig and legacy_mode):
             meta_rig = bpy.context.active_object
             bpy.context.view_layer.objects.active = meta_rig
             bpy.ops.pose.rigify_generate()
@@ -292,7 +292,7 @@ class RIGIFYFORMBLAB_OT_generaterig(bpy.types.Operator):
             else:
                 rigify_rig.pose.bones["hand_ik" + ext].custom_shape_scale = 2.5
 
-        if is_muscle_rig:
+        if is_muscle_rig and legacy_mode:
             # clean extra bones left behind
             # TODO: for some reason when I set the layers it results in 
             # some bones from the original rig left behind,

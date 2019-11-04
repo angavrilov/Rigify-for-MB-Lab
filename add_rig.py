@@ -120,6 +120,7 @@ def set_rigify_data(obj):
     arm.rigify_layers[18].row = 12
     arm.rigify_layers[18].selset = False
     arm.rigify_layers[18].group = 4
+    """
     arm.rigify_layers[19].name = "Muscle Arm.L"
     arm.rigify_layers[19].row = 16
     arm.rigify_layers[19].selset = False
@@ -156,12 +157,13 @@ def set_rigify_data(obj):
     arm.rigify_layers[27].row = 1
     arm.rigify_layers[27].selset = False
     arm.rigify_layers[27].group = 0
+    """
     arm.rigify_layers[28].name = "Root"
     arm.rigify_layers[28].row = 14
     arm.rigify_layers[28].selset = False
     arm.rigify_layers[28].group = 1
 
-    arm.layers = [(x in {0, 3, 5, 7, 10, 13, 16, 19, 20, 21, 22, 23, 24}) for x in range(32)]
+    arm.layers = [(x in {0, 3, 5, 7, 10, 13, 16, 19, 20, 21, 22, 23, 24, 29}) for x in range(32)]
 
 
 class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
@@ -181,7 +183,7 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
 
     bool_super_finger: bpy.props.BoolProperty(name="Finger Rig Type: limbs.super_finger (non-legacy)",
                                               description="",
-                                              default=False)
+                                              default=True)
 
     def set_layers(self, meta_rig):
         # bone names, left layer, right layer, left tweak layer, right
@@ -218,7 +220,14 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
                 'fk_L': -1, 'fk_R': -1},
                 {'bname': {'spine01', 'spine02', 'spine03'},
                 'layer_L': 3, 'layer_R': 3, 'tweak_L': -1, 'tweak_R': -1,
-                'fk_L': -1, 'fk_R': -1}]
+                'fk_L': -1, 'fk_R': -1},
+                {'bname': {'rot_helper01', 'rot_helper03', 'rot_helper04', 'rot_helper06'},
+                'layer_L': 13, 'layer_R': 16, 'tweak_L': -1, 'tweak_R': -1,
+                'fk_L': -1, 'fk_R': -1},
+                {'bname': {'rot_helper02'},
+                'layer_L': 7, 'layer_R': 10, 'tweak_L': -1, 'tweak_R': -1,
+                'fk_L': -1, 'fk_R': -1},
+                ]
 
         bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
@@ -250,7 +259,8 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
                                 pbone.rigify_parameters.fk_layers = [i == entry['fk_R'] for i in range(0, 32)]
                         except AttributeError:
                             pass
-
+                elif 'muscle' in pbone.name:
+                    pbone.bone.layers = [i == 29 for i in range(32)]
 
 
     def execute(self, context):
@@ -347,17 +357,6 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        # Fix dislocated joints in thigh and calf
-        if is_muscle_rig:
-            bpy.ops.object.mode_set(mode='EDIT')
-            for ext in ["_L", "_R"]:
-                calf_head = meta_rig.data.edit_bones["calf" + ext].head.copy()
-                foot_head = meta_rig.data.edit_bones["foot" + ext].head.copy()
-                meta_rig.data.edit_bones["thigh" + ext].tail = calf_head
-                meta_rig.data.edit_bones["calf" + ext].tail = foot_head
-            bpy.ops.object.mode_set(mode='OBJECT')
-
-
         # Straight legs and knee offset fix
         if self.bool_straight_legs:
             for ext in ["_L", "_R"]:
@@ -433,14 +432,27 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
         bpy.ops.armature.calculate_roll(type='GLOBAL_POS_Z')
 
         if is_muscle_rig:
-            for bone_name in ["rot_helper01", "rot_helper03", "rot_helper06"]:
+            align_table = {
+                "rot_helper01": "calf",
+                "rot_helper02": "lowerarm",
+                "rot_helper03": "thigh",
+                "rot_helper04": "foot",
+                "rot_helper06": "thigh",
+            }
+
+            for item in align_table.items():
                 for ext in ["_L", "_R"]:
-                    name = bone_name + ext
-                    meta_rig.data.edit_bones[name].roll = meta_rig.data.edit_bones[name].roll + math.pi
+                    dest, src = [meta_rig.data.edit_bones[x + ext] for x in item]
+                    dest.tail = dest.head + src.vector.normalized() * dest.length
+                    dest.roll = src.roll
 
             meta_rig.data.edit_bones["clavicle_L"].roll = math.radians(94.6248)
             meta_rig.data.edit_bones["clavicle_R"].roll = math.radians(-94.6248)
 
+            # Disconnect rot_helpers
+            for bone in meta_rig.data.edit_bones:
+                if 'rot_helper' in bone.name:
+                    bone.use_connect = False
 
         # Fix disconnected toes
         meta_rig.data.edit_bones['toes_L'].use_connect = True
@@ -510,6 +522,55 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
         for bone in meta_rig.data.edit_bones.values():
             bone.inherit_scale = 'FULL'
 
+        # More muscle rotation helpers
+        new_muscle_helpers = {
+            'upperarm_40': {
+                'parent': 'upperarm', 'position': 0.40, 'layers': 'rot_helper02',
+                'children': ['shld_muscle01_T', 'shld_muscle02_T', 'pct_muscle_01_T'],
+            },
+            'upperarm_85': {
+                'parent': 'upperarm', 'position': 0.85, 'layers': 'rot_helper02',
+                'children': ['lwrm_muscle_01_H', 'lwrm_muscle_02_H', 'lwrm_muscle_03_H', 'lwrm_muscle_04_H'],
+            },
+            'thigh_80': {
+                'parent': 'thigh', 'position': 0.805, 'layers': 'rot_helper01',
+                'children': ['lgs_muscle_03_T', 'lgs_muscle_05_T', 'lwrl_muscle_02_H', 'lwrl_muscle_04_H'],
+            },
+        }
+
+        joint_helpers = {
+            'rot_helper01': ['thigh', 'calf'],
+            'rot_helper02': ['upperarm', 'lowerarm'],
+        }
+
+        if is_muscle_rig and not legacy_mode:
+            for ext in ["_L", "_R"]:
+                # Add helpers following B-Bone deformation at various points
+                for idname, info in new_muscle_helpers.items():
+                    bone_name = 'rot_helper_ex_' + idname + ext
+                    bone = meta_rig.data.edit_bones.new(bone_name)
+                    bone.layers = meta_rig.data.edit_bones[info['layers'] + ext].layers
+
+                    parent_bone = meta_rig.data.edit_bones[info['parent'] + ext]
+                    bone.head = parent_bone.head + parent_bone.vector * info['position']
+                    bone.tail = bone.head + parent_bone.vector * 0.1
+                    bone.roll = parent_bone.roll
+                    bone.bbone_x = bone.bbone_z = parent_bone.bbone_x * 1.1
+
+                    for child_name in info['children']:
+                        child_bone = meta_rig.data.edit_bones[child_name + ext]
+                        assert child_bone.parent == parent_bone
+                        child_bone.parent = bone
+
+                # Fix knee and elbow helpers to be B-Bone aware
+                for idname, parents in joint_helpers.items():
+                    bone = meta_rig.data.edit_bones[idname + ext]
+                    assert bone.parent.name == parents[0] + ext
+                    bone.parent = None
+
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+
         # Unlock transforms
         for name, bone in meta_rig.pose.bones.items():
             bone.lock_location[0] = False
@@ -571,6 +632,53 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
                 for name in ['thumb01', 'index01', 'middle01', 'ring01', 'pinky01']:
                     bone_name = name + ext
                     meta_rig.pose.bones[bone_name].rigify_type = "limbs.simple_tentacle"
+
+            if is_muscle_rig:
+                for ext in ["_L", "_R"]:
+                    # Add helpers following B-Bone deformation at various points
+                    for idname, info in new_muscle_helpers.items():
+                        bone_name = 'rot_helper_ex_' + idname + ext
+                        pbone = meta_rig.pose.bones[bone_name]
+
+                        con = pbone.constraints.new(type='ARMATURE')
+                        con.name = 'ParentBBone@DEF'
+                        tgt = con.targets.new()
+                        tgt.target = meta_rig
+                        tgt.subtarget = info['parent'] + ext
+
+                    # Fix knee and elbow helpers to be B-Bone aware
+                    for idname, parents in joint_helpers.items():
+                        pbone = meta_rig.pose.bones[idname + ext]
+                        for constraint in pbone.constraints.values():
+                            pbone.constraints.remove(constraint)
+
+                        con = pbone.constraints.new(type='ARMATURE')
+                        con.name = 'ParentBBone@DEF'
+                        con.use_deform_preserve_volume = True
+                        for tgt_name in parents:
+                            tgt = con.targets.new()
+                            tgt.target = meta_rig
+                            tgt.subtarget = tgt_name + ext
+
+                def is_muscle_bone(name):
+                    return 'rot_helper' in name or 'muscle' in name
+
+                for pbone in meta_rig.pose.bones:
+                    if is_muscle_bone(pbone.name):
+                        pbone.rigify_type = "basic.raw_copy"
+                        pbone.rigify_parameters.relink_constraints = True
+
+                        if pbone.bone.parent and not is_muscle_bone(pbone.bone.parent.name):
+                            pbone.rigify_parameters.parent_bone = 'DEF'
+
+                        for con in pbone.constraints:
+                            if hasattr(con, 'subtarget') and not is_muscle_bone(con.subtarget):
+                                con.name += "@DEF"
+
+                        if pbone.bone.bbone_segments > 1:
+                            pbone.name = "DEF-" + pbone.name
+                        else:
+                            pbone.name = "MCH-" + pbone.name
 
         meta_rig.data.bones["breast_L"].hide = False
         meta_rig.data.bones["breast_R"].hide = False
