@@ -590,8 +590,7 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
 
                 for pbone in meta_rig.pose.bones:
                     if is_muscle_bone(pbone.name):
-                        pbone.rigify_type = "basic.super_copy"
-                        pbone.rigify_parameters.make_control = False
+                        pbone.rigify_type = "basic.raw_copy"
                         pbone.rigify_parameters.relink_constraints = True
 
                         if not is_muscle_bone(pbone.bone.parent.name):
@@ -602,10 +601,9 @@ class RIGIFYFORMBLAB_OT_addrig(bpy.types.Operator):
                                 con.name += "@DEF"
 
                         if pbone.bone.bbone_segments > 1:
-                            pbone.rigify_parameters.make_deform = True
-                            pbone.rigify_parameters.rename_to_deform = True
+                            pbone.name = "DEF-" + pbone.name
                         else:
-                            pbone.rigify_parameters.make_deform = False
+                            pbone.name = "MCH-" + pbone.name
 
         meta_rig.data.bones["breast_L"].hide = False
         meta_rig.data.bones["breast_R"].hide = False
